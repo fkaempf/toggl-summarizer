@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toggl Lab Meeting Summarizer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.5;
+      padding: 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+      color: #1a1a1a;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+      align-items: end;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 0.25rem; }
+    .field label { font-size: 0.8rem; color: #666; font-weight: 500; }
+
+    input {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      background: #fff;
+    }
+
+    input:focus { outline: none; border-color: #e57cd8; }
+    input[type="password"] { width: 280px; }
+
+    button {
+      padding: 0.5rem 1.25rem;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+
+    .btn-primary { background: #e57cd8; color: #fff; }
+    .btn-primary:hover { background: #d066c3; }
+    .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+
+    .btn-secondary { background: #e0e0e0; color: #333; }
+    .btn-secondary:hover { background: #d0d0d0; }
+
+    #status {
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    #status.loading { display: block; background: #fff3cd; color: #856404; }
+    #status.error { display: block; background: #f8d7da; color: #721c24; }
+    #status.success { display: block; background: #d4edda; color: #155724; }
+
+    .summary-bar {
+      display: flex;
+      gap: 2rem;
+      background: #fff;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .summary-stat { display: flex; flex-direction: column; }
+    .summary-stat .value { font-size: 1.4rem; font-weight: 600; color: #1a1a1a; }
+    .summary-stat .label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      background: #fafafa;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #888;
+      border-bottom: 1px solid #eee;
+    }
+
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: #e57cd8; }
+
+    td {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 0.9rem;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background: #fafafa; }
+
+    .hours-cell {
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+      text-align: right;
+    }
+
+    .count-cell {
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      color: #888;
+    }
+
+    .project-tag {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      background: #f0e6ff;
+      color: #6b3fa0;
+    }
+
+    .actions { margin-top: 1rem; display: flex; gap: 0.5rem; }
+
+    #results { display: none; }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.85rem;
+      color: #555;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .sub-descriptions {
+      font-size: 0.75rem;
+      color: #999;
+      margin-top: 0.2rem;
+    }
+
+    .check-cell { width: 30px; text-align: center; }
+    .check-cell input { cursor: pointer; }
+
+    tr.selected { background: #fdf2ff; }
+    tr.selected:hover { background: #f9e6ff; }
+
+    #groupSelectedBtn {
+      display: none;
+      background: #e57cd8;
+      color: #fff;
+      padding: 0.4rem 1rem;
+      font-size: 0.85rem;
+    }
+
+    #groupSelectedBtn:hover { background: #d066c3; }
+
+    #ungroupBtn {
+      display: none;
+      background: #e0e0e0;
+      color: #333;
+      padding: 0.4rem 1rem;
+      font-size: 0.85rem;
+    }
+
+    #ungroupBtn:hover { background: #d0d0d0; }
+  </style>
+</head>
+<body>
+  <h1>Toggl Lab Meeting Summarizer</h1>
+
+  <div class="form-row">
+    <div class="field">
+      <label for="apiToken">API Token</label>
+      <input type="password" id="apiToken" placeholder="Paste your Toggl API token" value="433e47a245c469e20ef858f8a07447e0">
+    </div>
+    <div class="field">
+      <label for="startDate">From</label>
+      <input type="date" id="startDate" value="2025-10-21">
+    </div>
+    <div class="field">
+      <label for="endDate">To</label>
+      <input type="date" id="endDate">
+    </div>
+    <button class="btn-primary" id="fetchBtn">Fetch</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="results">
+    <div class="summary-bar">
+      <div class="summary-stat">
+        <span class="value" id="totalHours">-</span>
+        <span class="label">Total Hours</span>
+      </div>
+      <div class="summary-stat">
+        <span class="value" id="totalGroups">-</span>
+        <span class="label">Distinct Tasks</span>
+      </div>
+      <div class="summary-stat">
+        <span class="value" id="totalEntries">-</span>
+        <span class="label">Time Entries</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="toggle-label">
+        <input type="checkbox" id="mergeToggle"> Merge similar entries
+      </label>
+      <button class="btn-primary" id="groupSelectedBtn">Group selected</button>
+      <button id="ungroupBtn">Reset manual groups</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th class="check-cell"></th>
+          <th class="sortable" data-sort="description">Description</th>
+          <th class="sortable" data-sort="project">Project</th>
+          <th class="sortable" data-sort="hours" style="text-align:right">Hours</th>
+          <th style="text-align:right">Entries</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+
+    <div class="actions">
+      <button class="btn-secondary" id="copyTextBtn">Copy as text</button>
+      <button class="btn-secondary" id="copyMdBtn">Copy as Markdown</button>
+    </div>
+  </div>
+
+  <script>
+    var API_BASE = 'https://api.track.toggl.com/api/v9';
+    var REPORTS_BASE = 'https://api.track.toggl.com/reports/api/v3';
+    var WORKSPACE_ID = 6487717;
+
+    var rawGroups = [];       // ungrouped (by exact description)
+    var manualGroups = null;  // manually grouped (null = not applied)
+    var currentGroups = [];   // what's displayed
+    var currentSort = { key: 'hours', dir: 'desc' };
+    var selectedIndices = new Set();
+
+    // Set default end date to tomorrow (to include today's entries)
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('endDate').value = tomorrow.toISOString().split('T')[0];
+
+    // Restore token from localStorage
+    var savedToken = localStorage.getItem('toggl_token');
+    if (savedToken) document.getElementById('apiToken').value = savedToken;
+
+    // Wire up event listeners
+    document.getElementById('fetchBtn').addEventListener('click', fetchAndRender);
+    document.getElementById('copyTextBtn').addEventListener('click', copyAsText);
+    document.getElementById('copyMdBtn').addEventListener('click', copyAsMarkdown);
+    document.getElementById('mergeToggle').addEventListener('change', function() {
+      if (rawGroups.length === 0) return;
+      selectedIndices.clear();
+      refreshCurrentGroups();
+    });
+    document.getElementById('groupSelectedBtn').addEventListener('click', groupSelected);
+    document.getElementById('ungroupBtn').addEventListener('click', function() {
+      manualGroups = null;
+      selectedIndices.clear();
+      document.getElementById('ungroupBtn').style.display = 'none';
+      refreshCurrentGroups();
+    });
+    document.querySelectorAll('th.sortable').forEach(function(th) {
+      th.addEventListener('click', function() { sortBy(th.dataset.sort); });
+    });
+
+    function authHeader(token) {
+      return 'Basic ' + btoa(token + ':api_token');
+    }
+
+    function setStatus(type, msg) {
+      var el = document.getElementById('status');
+      el.className = type;
+      el.textContent = msg;
+    }
+
+    function formatHours(seconds) {
+      return (seconds / 3600).toFixed(1);
+    }
+
+    // ── Fetch logic (Reports API with pagination) ──
+
+    async function fetchTimeEntries(token, startDate, endDate) {
+      var all = [];
+      var page = 1;
+      var body = { start_date: startDate, end_date: endDate };
+
+      while (true) {
+        setStatus('loading', 'Fetching entries (page ' + page + ')...');
+        var resp = await fetch(REPORTS_BASE + '/workspace/' + WORKSPACE_ID + '/search/time_entries', {
+          method: 'POST',
+          headers: {
+            'Authorization': authHeader(token),
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        });
+        if (!resp.ok) {
+          var text = await resp.text();
+          throw new Error('Reports API ' + resp.status + ': ' + text);
+        }
+        var data = await resp.json();
+        if (!data || data.length === 0) break;
+        all.push.apply(all, data);
+
+        var nextRow = resp.headers.get('x-next-row-number');
+        var nextId = resp.headers.get('x-next-id');
+        var nextTs = resp.headers.get('x-next-timestamp');
+        if (!nextRow) break;
+
+        body = {
+          start_date: startDate,
+          end_date: endDate,
+          first_row_number: parseInt(nextRow, 10),
+          first_id: parseInt(nextId, 10),
+          first_timestamp: parseInt(nextTs, 10)
+        };
+        page++;
+      }
+      return all;
+    }
+
+    async function fetchProjects(token) {
+      setStatus('loading', 'Fetching projects...');
+      var resp = await fetch(API_BASE + '/me/projects', {
+        headers: { 'Authorization': authHeader(token) }
+      });
+      if (!resp.ok) {
+        console.warn('Could not fetch projects:', resp.status);
+        return [];
+      }
+      return await resp.json();
+    }
+
+    // ── Grouping by exact description ──
+
+    function groupByDescription(entries, projects) {
+      var projectMap = {};
+      projects.forEach(function(p) { projectMap[p.id] = p.name; });
+
+      var groups = {};
+      entries.forEach(function(entry) {
+        var desc = (entry.description || '').trim() || '(no description)';
+        var key = desc.toLowerCase();
+        var seconds = 0;
+        if (entry.time_entries && entry.time_entries.length) {
+          entry.time_entries.forEach(function(te) { seconds += te.seconds; });
+        }
+        if (!groups[key]) {
+          groups[key] = {
+            description: desc,
+            totalSeconds: 0,
+            projectSet: new Set(),
+            count: 0
+          };
+        }
+        groups[key].totalSeconds += seconds;
+        groups[key].count += 1;
+        var pName = projectMap[entry.project_id] || '';
+        if (pName) groups[key].projectSet.add(pName);
+      });
+
+      return Object.values(groups).map(function(g) {
+        return {
+          description: g.description,
+          totalSeconds: g.totalSeconds,
+          project: Array.from(g.projectSet).join(', ') || '-',
+          hours: g.totalSeconds / 3600,
+          count: g.count,
+          subDescriptions: []
+        };
+      });
+    }
+
+    // ── Fuzzy merge logic ──
+
+    var STOP_WORDS = new Set([
+      'a', 'an', 'the', 'and', 'or', 'with', 'to', 'for', 'in', 'on', 'of', 'up',
+      'work', 'continue', 'start', 'try', 'prepare', 'preprare', 'begin', 'do',
+      'run', 'make', 'get', 'set', 'new'
+    ]);
+
+    function tokenize(desc) {
+      return desc.toLowerCase()
+        .replace(/[.\\\/_\-()]/g, ' ')
+        .split(/\s+/)
+        .map(function(w) { return w.replace(/[^a-z0-9]/g, ''); })
+        .filter(function(w) { return w.length > 1 && !STOP_WORDS.has(w); })
+        .map(function(w) {
+          // Basic stemming: -ing, -s
+          if (w.endsWith('ing') && w.length > 5) return w.slice(0, -3);
+          if (w.endsWith('s') && w.length > 3 && !w.endsWith('ss')) return w.slice(0, -1);
+          return w;
+        });
+    }
+
+    function tokenOverlap(tokensA, tokensB) {
+      if (tokensA.length === 0 || tokensB.length === 0) return { score: 0, count: 0 };
+      var setB = new Set(tokensB);
+      var matchCount = 0;
+      tokensA.forEach(function(t) { if (setB.has(t)) matchCount++; });
+      return {
+        score: matchCount / Math.min(tokensA.length, tokensB.length),
+        count: matchCount
+      };
+    }
+
+    function mergeSimilarGroups(groups) {
+      // Sort by hours descending so the biggest entry becomes each group's anchor
+      var sorted = groups.slice().sort(function(a, b) { return b.hours - a.hours; });
+
+      var mergedGroups = []; // each: { anchor, anchorTokens, members[] }
+
+      sorted.forEach(function(g) {
+        var tokens = tokenize(g.description);
+
+        // Find best matching existing merged group
+        var bestIdx = -1;
+        var bestScore = 0;
+        var bestCount = 0;
+
+        mergedGroups.forEach(function(mg, idx) {
+          var result = tokenOverlap(tokens, mg.anchorTokens);
+          // Require overlap >= 0.6, tiebreak by absolute match count
+          if (result.score >= 0.6 && (result.count > bestCount || (result.count === bestCount && result.score > bestScore))) {
+            bestIdx = idx;
+            bestScore = result.score;
+            bestCount = result.count;
+          }
+        });
+
+        if (bestIdx >= 0) {
+          mergedGroups[bestIdx].members.push(g);
+        } else {
+          mergedGroups.push({
+            anchor: g,
+            anchorTokens: tokens,
+            members: [g]
+          });
+        }
+      });
+
+      return mergedGroups.map(function(mg) {
+        var totalSeconds = 0;
+        var totalCount = 0;
+        var projectSet = new Set();
+        var subDescs = [];
+
+        mg.members.forEach(function(m) {
+          totalSeconds += m.totalSeconds;
+          totalCount += m.count;
+          if (m.project && m.project !== '-') {
+            m.project.split(', ').forEach(function(p) { projectSet.add(p); });
+          }
+          if (m.description !== mg.anchor.description) {
+            subDescs.push(m.description + ' (' + m.hours.toFixed(1) + 'h)');
+          }
+        });
+
+        return {
+          description: mg.anchor.description,
+          totalSeconds: totalSeconds,
+          project: projectSet.size > 0 ? Array.from(projectSet).join(', ') : '-',
+          hours: totalSeconds / 3600,
+          count: totalCount,
+          subDescriptions: subDescs
+        };
+      });
+    }
+
+    // ── Sorting & rendering ──
+
+    function refreshCurrentGroups() {
+      var base = manualGroups || rawGroups;
+      var isMerged = document.getElementById('mergeToggle').checked;
+      currentGroups = isMerged ? mergeSimilarGroups(base) : base;
+      selectedIndices.clear();
+      updateGroupBtn();
+      updateSummaryStats();
+      renderTable();
+    }
+
+    function sortBy(key) {
+      if (currentSort.key === key) {
+        currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
+      } else {
+        currentSort.key = key;
+        currentSort.dir = key === 'description' ? 'asc' : 'desc';
+      }
+      renderTable();
+    }
+
+    function updateSummaryStats() {
+      var totalSec = currentGroups.reduce(function(s, g) { return s + g.totalSeconds; }, 0);
+      var totalEntries = currentGroups.reduce(function(s, g) { return s + g.count; }, 0);
+      document.getElementById('totalHours').textContent = formatHours(totalSec) + 'h';
+      document.getElementById('totalGroups').textContent = currentGroups.length;
+      document.getElementById('totalEntries').textContent = totalEntries;
+    }
+
+    function updateGroupBtn() {
+      document.getElementById('groupSelectedBtn').style.display =
+        selectedIndices.size >= 2 ? 'inline-block' : 'none';
+    }
+
+    function onCheckboxChange(idx, checked) {
+      if (checked) selectedIndices.add(idx);
+      else selectedIndices.delete(idx);
+      updateGroupBtn();
+      // Update row highlight
+      var rows = document.getElementById('tableBody').children;
+      if (rows[idx]) {
+        rows[idx].className = checked ? 'selected' : '';
+      }
+    }
+
+    function groupSelected() {
+      if (selectedIndices.size < 2) return;
+
+      // Get sorted view to map indices to groups
+      var sorted = getSortedGroups();
+      var selected = [];
+      var unselected = [];
+      sorted.forEach(function(g, idx) {
+        if (selectedIndices.has(idx)) selected.push(g);
+        else unselected.push(g);
+      });
+
+      // Merge selected: biggest hours entry is the anchor
+      selected.sort(function(a, b) { return b.hours - a.hours; });
+      var anchor = selected[0];
+      var totalSeconds = 0;
+      var totalCount = 0;
+      var projectSet = new Set();
+      var subDescs = anchor.subDescriptions ? anchor.subDescriptions.slice() : [];
+
+      selected.forEach(function(g) {
+        totalSeconds += g.totalSeconds;
+        totalCount += g.count;
+        if (g.project && g.project !== '-') {
+          g.project.split(', ').forEach(function(p) { projectSet.add(p); });
+        }
+        if (g !== anchor) {
+          subDescs.push(g.description + ' (' + g.hours.toFixed(1) + 'h)');
+          if (g.subDescriptions) {
+            g.subDescriptions.forEach(function(sd) { subDescs.push(sd); });
+          }
+        }
+      });
+
+      var merged = {
+        description: anchor.description,
+        totalSeconds: totalSeconds,
+        project: projectSet.size > 0 ? Array.from(projectSet).join(', ') : '-',
+        hours: totalSeconds / 3600,
+        count: totalCount,
+        subDescriptions: subDescs
+      };
+
+      // Build new groups list: unselected + merged
+      var newGroups = unselected.slice();
+      newGroups.push(merged);
+      manualGroups = newGroups;
+
+      selectedIndices.clear();
+      document.getElementById('ungroupBtn').style.display = 'inline-block';
+
+      // Reapply auto-merge if toggled
+      var isMerged = document.getElementById('mergeToggle').checked;
+      currentGroups = isMerged ? mergeSimilarGroups(manualGroups) : manualGroups;
+      updateGroupBtn();
+      updateSummaryStats();
+      renderTable();
+    }
+
+    function getSortedGroups() {
+      return currentGroups.slice().sort(function(a, b) {
+        var cmp;
+        if (currentSort.key === 'hours') cmp = a.hours - b.hours;
+        else if (currentSort.key === 'project') cmp = a.project.localeCompare(b.project);
+        else cmp = a.description.localeCompare(b.description);
+        return currentSort.dir === 'desc' ? -cmp : cmp;
+      });
+    }
+
+    function renderTable() {
+      var sorted = getSortedGroups();
+
+      document.querySelectorAll('th.sortable').forEach(function(th) {
+        var arrow = currentSort.key === th.dataset.sort
+          ? (currentSort.dir === 'desc' ? ' \u25BC' : ' \u25B2')
+          : '';
+        var baseText = th.dataset.sort.charAt(0).toUpperCase() + th.dataset.sort.slice(1);
+        th.textContent = baseText + arrow;
+      });
+
+      var tbody = document.getElementById('tableBody');
+      while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+      sorted.forEach(function(g, idx) {
+        var tr = document.createElement('tr');
+        if (selectedIndices.has(idx)) tr.className = 'selected';
+
+        var tdCheck = document.createElement('td');
+        tdCheck.className = 'check-cell';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = selectedIndices.has(idx);
+        cb.addEventListener('change', function() { onCheckboxChange(idx, this.checked); });
+        tdCheck.appendChild(cb);
+        tr.appendChild(tdCheck);
+
+        var tdDesc = document.createElement('td');
+        tdDesc.textContent = g.description;
+        if (g.subDescriptions && g.subDescriptions.length > 0) {
+          var sub = document.createElement('div');
+          sub.className = 'sub-descriptions';
+          sub.textContent = 'incl. ' + g.subDescriptions.join(', ');
+          tdDesc.appendChild(sub);
+        }
+        tr.appendChild(tdDesc);
+
+        var tdProj = document.createElement('td');
+        if (g.project !== '-') {
+          var span = document.createElement('span');
+          span.className = 'project-tag';
+          span.textContent = g.project;
+          tdProj.appendChild(span);
+        } else {
+          tdProj.textContent = '-';
+          tdProj.style.color = '#ccc';
+        }
+        tr.appendChild(tdProj);
+
+        var tdHours = document.createElement('td');
+        tdHours.className = 'hours-cell';
+        tdHours.textContent = g.hours.toFixed(1) + 'h';
+        tr.appendChild(tdHours);
+
+        var tdCount = document.createElement('td');
+        tdCount.className = 'count-cell';
+        tdCount.textContent = g.count;
+        tr.appendChild(tdCount);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ── Main fetch + render ──
+
+    async function fetchAndRender() {
+      var token = document.getElementById('apiToken').value.trim();
+      var startDate = document.getElementById('startDate').value;
+      var endDate = document.getElementById('endDate').value;
+
+      if (!token) { setStatus('error', 'Please enter your API token.'); return; }
+      if (!startDate || !endDate) { setStatus('error', 'Please set both dates.'); return; }
+
+      localStorage.setItem('toggl_token', token);
+
+      var btn = document.getElementById('fetchBtn');
+      btn.disabled = true;
+
+      try {
+        var projects = await fetchProjects(token);
+        var entries = await fetchTimeEntries(token, startDate, endDate);
+
+        if (entries.length === 0) {
+          setStatus('error', 'No entries found in this date range.');
+          document.getElementById('results').style.display = 'none';
+          btn.disabled = false;
+          return;
+        }
+
+        rawGroups = groupByDescription(entries, projects);
+        manualGroups = null;
+        document.getElementById('ungroupBtn').style.display = 'none';
+        currentSort = { key: 'hours', dir: 'desc' };
+        refreshCurrentGroups();
+        document.getElementById('results').style.display = 'block';
+
+        var totalEntries = rawGroups.reduce(function(s, g) { return s + g.count; }, 0);
+        var isMerged = document.getElementById('mergeToggle').checked;
+        setStatus('success', 'Loaded ' + totalEntries + ' entries across ' + rawGroups.length + ' tasks.' +
+          (isMerged ? ' Merged into ' + currentGroups.length + ' groups.' : ''));
+      } catch (err) {
+        setStatus('error', err.message);
+        console.error(err);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── Copy functions ──
+
+    function getDisplayGroups() {
+      return currentGroups.slice().sort(function(a, b) { return b.hours - a.hours; });
+    }
+
+    function copyAsText() {
+      var sorted = getDisplayGroups();
+      var totalSec = currentGroups.reduce(function(s, g) { return s + g.totalSeconds; }, 0);
+      var lines = ['Toggl Summary (' + document.getElementById('startDate').value + ' to ' + document.getElementById('endDate').value + ')',
+        'Total: ' + formatHours(totalSec) + 'h', ''];
+      sorted.forEach(function(g) {
+        lines.push(g.description + ' (' + g.project + ') - ' + g.hours.toFixed(1) + 'h (' + g.count + ' entries)');
+        if (g.subDescriptions && g.subDescriptions.length > 0) {
+          lines.push('  incl. ' + g.subDescriptions.join(', '));
+        }
+      });
+      navigator.clipboard.writeText(lines.join('\n'));
+      setStatus('success', 'Copied as plain text!');
+    }
+
+    function copyAsMarkdown() {
+      var sorted = getDisplayGroups();
+      var totalSec = currentGroups.reduce(function(s, g) { return s + g.totalSeconds; }, 0);
+      var md = '## Toggl Summary (' + document.getElementById('startDate').value + ' to ' + document.getElementById('endDate').value + ')\n\n';
+      md += '**Total: ' + formatHours(totalSec) + 'h**\n\n';
+      md += '| Description | Project | Hours | Entries |\n';
+      md += '|---|---|---:|---:|\n';
+      sorted.forEach(function(g) {
+        var desc = g.description;
+        if (g.subDescriptions && g.subDescriptions.length > 0) {
+          desc += ' *(incl. ' + g.subDescriptions.join(', ') + ')*';
+        }
+        md += '| ' + desc + ' | ' + g.project + ' | ' + g.hours.toFixed(1) + 'h | ' + g.count + ' |\n';
+      });
+      navigator.clipboard.writeText(md);
+      setStatus('success', 'Copied as Markdown table!');
+    }
+  </script>
+</body>
+</html>
